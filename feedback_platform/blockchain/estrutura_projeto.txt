@@ -1,0 +1,29 @@
+Need to install the following packages:
+tree-cli@0.6.7
+Ok to proceed? (y) 
+
+C:\Users\giffo\Documents\Lukas Programação\feedback_platform\feedback_platform\blockchain
+├── admin.py
+├── apps.py
+├── contracts
+├── estrutura_projeto.txt
+├── hardhat.config.js
+├── ignition
+├── management
+├── migrations
+├── models.py
+├── node_modules
+├── package-lock.json
+├── package.json
+├── README.md
+├── services.py
+├── test
+├── tests.py
+├── views.py
+└── __init__.py
+
+directory: 6 file: 12
+
+
+
+[2K[1G
