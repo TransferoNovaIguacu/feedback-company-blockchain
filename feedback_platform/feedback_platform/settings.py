@@ -9,24 +9,34 @@ https://docs.djangoproject.com/en/5.2/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
+# settings.py
+from decimal import Decimal
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv()  # Carregar variáveis do .env
 
-# Configuração dinâmica de rede
-IS_DEV = os.getenv('DEV_MODE', 'True') == 'True'
-RPC_URL = os.getenv('SEPOLIA_RPC_URL') if IS_DEV else os.getenv('POLYGON_RPC_URL')
-CHAIN_ID = int(os.getenv('CHAIN_ID', '11155111' if IS_DEV else '137'))
-EXPLORER_URL = "https://sepolia.etherscan.io" if IS_DEV else "https://polygonscan.com"
+# Configurações Blockchain
+WEB3_PROVIDER_URL = os.getenv('WEB3_PROVIDER_URL')
+CHAIN_ID = int(os.getenv('CHAIN_ID', 11155111))  # Sepolia
+CONTRACT_ADDRESS = os.getenv('CONTRACT_ADDRESS')
+PRIVATE_KEY = os.getenv('PRIVATE_KEY')
+ADMIN_ADDRESS = os.getenv('ADMIN_ADDRESS')
+REWARD_PER_FEEDBACK = Decimal(os.getenv('REWARD_PER_FEEDBACK', '0.5'))
+MIN_WITHDRAWAL = Decimal(os.getenv('MIN_WITHDRAWAL', '50'))
 
-BLOCKCHAIN_CONFIG = {
-    'RPC_URL': RPC_URL,
-    'CONTRACT_ADDRESS': os.getenv('CONTRACT_ADDRESS'),
-    'PRIVATE_KEY': os.getenv('PRIVATE_KEY'),
-    'CHAIN_ID': CHAIN_ID,
-    'EXPLORER_URL': EXPLORER_URL,
-    'IS_DEV': IS_DEV,
+# Configuração do Logger
+LOGGING = {
+    'version': 1,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
 }
 
 from pathlib import Path

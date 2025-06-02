@@ -1,5 +1,6 @@
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
+from django.shortcuts import get_object_or_404
 from .models import Feedback, UserProfile, RewardTransaction
 from django.conf import settings
 from decimal import Decimal
@@ -18,7 +19,8 @@ def submit_feedback(request, company_id):
         feedback = Feedback.objects.create(
             user=request.user,
             company_id=company_id,
-            comment=comment
+            comment=comment,
+            is_approved=False
         )
         
         # Atualizar saldo virtual
@@ -127,3 +129,30 @@ def withdraw_tokens(request):
         'status': 'error',
         'message': 'Método inválido'
     }, status=400)
+
+@login_required
+
+# TEM QUE COLOCAR STAFF MEMBER REQUIRED AQUI
+def approve_feedback(request, feedback_id):
+    feedback = get_object_or_404(Feedback, id=feedback_id)
+    
+    if feedback.is_approved:
+        return JsonResponse({'status': 'error', 'message': 'Feedback já aprovado'})
+    
+    feedback.is_approved = True
+    feedback.save()
+    
+    # Atualizar saldo virtual
+    profile, created = UserProfile.objects.get_or_create(user=feedback.user)
+    profile.virtual_balance += Decimal(settings.REWARD_PER_FEEDBACK)
+    profile.save()
+    
+    # Criar transação pendente
+    RewardTransaction.objects.create(
+        user=feedback.user,
+        amount=Decimal(settings.REWARD_PER_FEEDBACK),
+        tx_type='REWARD',
+        status='PENDING'
+    )
+    
+    return JsonResponse({'status': 'success', 'message': 'Feedback aprovado e recompensa atribuída'})

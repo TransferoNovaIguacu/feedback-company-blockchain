@@ -77,6 +77,34 @@ class BlockchainService:
         except Exception as e:
             print(f"Erro na transferência: {e}")
             return None
-    
+        
     def deploy_contract(self):
-        """Deploy do contrato na rede (para o comando de gerenciamento)"""
+        """Deploy do contrato na rede"""
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        abi_path = os.path.join(current_dir, 'abis', 'FeedbackToken.json')
+
+        with open(abi_path) as f:
+            abi_data = json.load(f)
+            bytecode = abi_data['bytecode']
+
+        # Criar contrato
+        FeedbackToken = self.w3.eth.contract(
+            abi=abi_data['abi'],
+            bytecode=bytecode
+        )
+
+        # Construir transação de deploy
+        tx = FeedbackToken.constructor().build_transaction({
+            'chainId': settings.CHAIN_ID,
+            'gas': 3000000,
+            'gasPrice': self.w3.eth.gas_price,
+            'nonce': self.w3.eth.get_transaction_count(self.admin_address),
+        })
+
+        # Assinar e enviar
+        signed_tx = self.w3.eth.account.sign_transaction(tx, settings.PRIVATE_KEY)
+        tx_hash = self.w3.eth.send_raw_transaction(signed_tx.rawTransaction)
+
+        # Esperar pela confirmação
+        receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash)
+        return receipt.contractAddress

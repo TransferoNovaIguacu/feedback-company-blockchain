@@ -11,7 +11,8 @@ class Feedback(models.Model):
     comment = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     is_approved = models.BooleanField(default=False)
-    is_useful = models.BooleanField(default=False)  # Avaliação da empresa
+    is_useful = models.BooleanField(default=False)
+    
     
     class Meta:
         ordering = ['-created_at']
@@ -41,3 +42,4 @@ class RewardTransaction(models.Model):
     tx_hash = models.CharField(max_length=66, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    processed_at = models.DateTimeField(null=True, blank=True)
