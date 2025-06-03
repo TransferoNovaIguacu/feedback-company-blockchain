@@ -8,14 +8,14 @@ from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from blockchain.services import BlockchainService
 from decimal import Decimal, InvalidOperation
+from django.contrib.admin.views.decorators import staff_member_required
 
 
 @login_required
 def submit_feedback(request, company_id):
     if request.method == 'POST':
         comment = request.POST.get('comment', '')
-        
-        # Criar feedback
+
         feedback = Feedback.objects.create(
             user=request.user,
             company_id=company_id,
@@ -23,12 +23,11 @@ def submit_feedback(request, company_id):
             is_approved=False
         )
         
-        # Atualizar saldo virtual
         profile, created = UserProfile.objects.get_or_create(user=request.user)
         profile.virtual_balance += Decimal(settings.REWARD_PER_FEEDBACK)
         profile.save()
         
-        # Criar transação pendente
+
         RewardTransaction.objects.create(
             user=request.user,
             amount=Decimal(settings.REWARD_PER_FEEDBACK),
@@ -49,7 +48,7 @@ def submit_feedback(request, company_id):
 def withdraw_tokens(request):
     if request.method == 'POST':
         try:
-            # Validar entrada
+
             amount = Decimal(request.POST.get('amount', '0'))
             wallet_address = request.POST.get('wallet_address', '').strip()
             
@@ -65,7 +64,6 @@ def withdraw_tokens(request):
                     'message': 'Endereço da carteira é obrigatório'
                 }, status=400)
             
-            # Verificar saldo
             profile = UserProfile.objects.get(user=request.user)
             if amount > profile.blockchain_balance:
                 return JsonResponse({
@@ -73,7 +71,6 @@ def withdraw_tokens(request):
                     'message': 'Saldo insuficiente para saque'
                 }, status=400)
             
-            # Verificar mínimo de saque
             min_withdrawal = Decimal(settings.MIN_WITHDRAWAL)
             if amount < min_withdrawal:
                 return JsonResponse({
@@ -81,7 +78,7 @@ def withdraw_tokens(request):
                     'message': f'Saque mínimo é {min_withdrawal} tokens'
                 }, status=400)
             
-            # Criar registro de transação
+
             transaction = RewardTransaction.objects.create(
                 user=request.user,
                 amount=amount,
@@ -89,17 +86,14 @@ def withdraw_tokens(request):
                 status='PENDING'
             )
             
-            # Iniciar transferência na blockchain
             service = BlockchainService()
             tx_hash = service.transfer(wallet_address, float(amount))
             
             if tx_hash:
-                # Atualizar transação
                 transaction.tx_hash = tx_hash
                 transaction.status = 'PROCESSING'
                 transaction.save()
                 
-                # Atualizar saldo do usuário
                 profile.blockchain_balance -= amount
                 profile.save()
                 
@@ -131,8 +125,7 @@ def withdraw_tokens(request):
     }, status=400)
 
 @login_required
-
-# TEM QUE COLOCAR STAFF MEMBER REQUIRED AQUI
+@staff_member_required
 def approve_feedback(request, feedback_id):
     feedback = get_object_or_404(Feedback, id=feedback_id)
     
@@ -142,12 +135,10 @@ def approve_feedback(request, feedback_id):
     feedback.is_approved = True
     feedback.save()
     
-    # Atualizar saldo virtual
     profile, created = UserProfile.objects.get_or_create(user=feedback.user)
     profile.virtual_balance += Decimal(settings.REWARD_PER_FEEDBACK)
     profile.save()
     
-    # Criar transação pendente
     RewardTransaction.objects.create(
         user=feedback.user,
         amount=Decimal(settings.REWARD_PER_FEEDBACK),
@@ -155,4 +146,7 @@ def approve_feedback(request, feedback_id):
         status='PENDING'
     )
     
-    return JsonResponse({'status': 'success', 'message': 'Feedback aprovado e recompensa atribuída'})
+    return JsonResponse({
+        'status': 'success',
+        'message': f'Feedback aprovado! Usuário ganhou {settings.REWARD_PER_FEEDBACK} tokens.'
+    })

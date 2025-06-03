@@ -14,11 +14,12 @@ from decimal import Decimal
 import os
 from dotenv import load_dotenv
 
-load_dotenv()  # Carregar variáveis do .env
+env_path = os.path.join(os.path.dirname(__file__), '..', '.env')
+load_dotenv(env_path)
 
 # Configurações Blockchain
 WEB3_PROVIDER_URL = os.getenv('WEB3_PROVIDER_URL')
-CHAIN_ID = int(os.getenv('CHAIN_ID', 11155111))  # Sepolia
+CHAIN_ID = int(os.getenv('CHAIN_ID', 11155111))
 CONTRACT_ADDRESS = os.getenv('CONTRACT_ADDRESS')
 PRIVATE_KEY = os.getenv('PRIVATE_KEY')
 ADMIN_ADDRESS = os.getenv('ADMIN_ADDRESS')

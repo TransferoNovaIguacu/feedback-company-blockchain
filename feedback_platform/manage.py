@@ -1,12 +1,20 @@
-#!/usr/bin/env python
-"""Django's command-line utility for administrative tasks."""
+# feedback_platform/manage.py
 import os
 import sys
-
+from pathlib import Path
+from dotenv import load_dotenv  # Importa a função
 
 def main():
-    """Run administrative tasks."""
+    # Define a raiz do projeto
+    BASE_DIR = Path(__file__).resolve().parent  # feedback_platform/
+    dotenv_path = BASE_DIR / 'blockchain' / '.env'  # Caminho específico para o .env
+    
+    # Carrega o .env do caminho correto
+    load_dotenv(dotenv_path)
+
+    # Configura as settings do Django
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'feedback_platform.settings')
+    
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:
@@ -16,7 +24,6 @@ def main():
             "forget to activate a virtual environment?"
         ) from exc
     execute_from_command_line(sys.argv)
-
 
 if __name__ == '__main__':
     main()

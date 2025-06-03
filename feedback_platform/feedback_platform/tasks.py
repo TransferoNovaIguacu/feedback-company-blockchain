@@ -12,7 +12,6 @@ logger = logging.getLogger(__name__)
 
 @shared_task
 def process_reward_batch():
-    # Buscar recompensas pendentes
     pending_rewards = RewardTransaction.objects.filter(
         status='PENDING',
         tx_type='REWARD',
@@ -25,7 +24,6 @@ def process_reward_batch():
     
     logger.info(f"Processando {pending_rewards.count()} recompensas pendentes")
     
-    # Agrupar por carteira
     rewards_by_wallet = {}
     transaction_ids = []
     
@@ -37,7 +35,6 @@ def process_reward_batch():
             rewards_by_wallet[wallet] += reward.amount
             transaction_ids.append(reward.id)
     
-    # Preparar dados para batch mint
     wallets = list(rewards_by_wallet.keys())
     amounts = [float(amount) for amount in rewards_by_wallet.values()]
     
@@ -46,14 +43,12 @@ def process_reward_batch():
         tx_hash = service.batch_mint(wallets, amounts)
         
         if tx_hash:
-            # Atualizar transações
             RewardTransaction.objects.filter(id__in=transaction_ids).update(
                 status='PROCESSING',
                 tx_hash=tx_hash,
                 processed_at=timezone.now()
             )
             
-            # Atualizar saldos dos usuários
             for wallet, amount in rewards_by_wallet.items():
                 profile = UserProfile.objects.get(wallet_address=wallet)
                 profile.virtual_balance -= amount
@@ -65,6 +60,5 @@ def process_reward_batch():
     
     except Exception as e:
         logger.error(f"Erro ao processar recompensas: {str(e)}")
-        # Adicionar lógica de retry ou tratamento de erro
         
     return None
