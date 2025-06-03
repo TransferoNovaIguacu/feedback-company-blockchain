@@ -6,12 +6,13 @@ from celery import shared_task
 from django.conf import settings
 from django.utils import timezone
 from blockchain.models import RewardTransaction, UserProfile
-from ..blockchain.services import BlockchainService
+from blockchain.services import BlockchainService
 
 logger = logging.getLogger(__name__)
 
-@shared_task
+@shared_task(name="process_reward_batch")
 def process_reward_batch():
+    logger.info("🔥 Tarefa process_reward_batch iniciada!")
     pending_rewards = RewardTransaction.objects.filter(
         status='PENDING',
         tx_type='REWARD',

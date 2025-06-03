@@ -1,21 +1,18 @@
-# blockchain/tasks/events.py
 import logging
 import time
 from celery import shared_task
 from web3.exceptions import TransactionNotFound
 from django.conf import settings
 from blockchain.services import BlockchainService
-from blockchain.models import RewardTransaction, UserProfile  # ✅ Importado corretamente
+from blockchain.models import RewardTransaction, UserProfile
 from django.db import transaction
 
 logger = logging.getLogger(__name__)
 
-@shared_task
+@shared_task(name="listen_for_batch_mint_events", queue='event_queue')
 def listen_for_batch_mint_events():
     """Escuta eventos BatchMinted e atualiza o sistema"""
     service = BlockchainService()
-    
-    # Cria filtro para eventos BatchMinted
     event_filter = service.contract.events.BatchMinted.create_filter(fromBlock='latest')
     
     while True:
@@ -38,7 +35,7 @@ def listen_for_batch_mint_events():
                     except Exception as e:
                         logger.error(f"🚨 Erro ao atualizar perfil {recipient}: {e}")
             
-            time.sleep(5)  # Aguarde antes de checar novamente
+            time.sleep(5)
 
         except Exception as e:
             logger.error(f"❌ Erro ao escutar eventos: {e}")
