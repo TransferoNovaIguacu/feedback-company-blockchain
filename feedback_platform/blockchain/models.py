@@ -19,7 +19,7 @@ class Feedback(models.Model):
 
 class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
-    wallet_address = models.CharField(max_length=42, blank=True, null=True)
+    wallet_address = models.CharField(max_length=42, blank=True, null=True, unique=True)
     virtual_balance = models.DecimalField(max_digits=36, decimal_places=18, default=0)
     blockchain_balance = models.DecimalField(max_digits=36, decimal_places=18, default=0)
 

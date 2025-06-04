@@ -6,7 +6,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **kwargs):
         service = BlockchainService()
-        recipients = ["0xf5b054B8518e9D7f4085feaeD4cBbC642b080ada"]
+        recipients = ["0x6D68105c0947bF1BfeB8594D5A771387Eac66E0c"]
         amounts = [100]
         
         tx_hash = service.batch_mint(recipients, amounts)

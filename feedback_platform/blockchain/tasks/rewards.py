@@ -12,35 +12,38 @@ logger = logging.getLogger(__name__)
 
 @shared_task(name="process_reward_batch")
 def process_reward_batch():
-    logger.info("🔥 Tarefa process_reward_batch iniciada!")
-    pending_rewards = RewardTransaction.objects.filter(
-        status='PENDING',
-        tx_type='REWARD',
-        user__userprofile__wallet_address__isnull=False
-    ).select_related('user__userprofile')
-    
-    if not pending_rewards:
-        logger.info("Nenhuma recompensa pendente para processar")
-        return
-    
-    logger.info(f"Processando {pending_rewards.count()} recompensas pendentes")
-    
-    rewards_by_wallet = {}
-    transaction_ids = []
-    
-    for reward in pending_rewards:
-        wallet = reward.user.userprofile.wallet_address
-        if wallet:
-            if wallet not in rewards_by_wallet:
-                rewards_by_wallet[wallet] = Decimal(0)
-            rewards_by_wallet[wallet] += reward.amount
-            transaction_ids.append(reward.id)
-    
-    wallets = list(rewards_by_wallet.keys())
-    amounts = [float(amount) for amount in rewards_by_wallet.values()]
-    
     try:
         service = BlockchainService()
+        if not service.contract:
+            logger.error("❌ Contrato não carregado. Não é possível mintar tokens.")
+            return None
+
+        pending_rewards = RewardTransaction.objects.filter(
+            status='PENDING',
+            tx_type='REWARD',
+            user__userprofile__wallet_address__isnull=False
+        ).select_related('user__userprofile')
+        
+        if not pending_rewards.exists():
+            logger.info("Nenhuma recompensa pendente")
+            return
+        
+        logger.info(f"Processando {pending_rewards.count()} recompensas pendentes")
+        
+        rewards_by_wallet = {}
+        transaction_ids = []
+        
+        for reward in pending_rewards:
+            wallet = reward.user.userprofile.wallet_address
+            if wallet:
+                if wallet not in rewards_by_wallet:
+                    rewards_by_wallet[wallet] = Decimal(0)
+                rewards_by_wallet[wallet] += reward.amount
+                transaction_ids.append(reward.id)
+
+        wallets = list(rewards_by_wallet.keys())
+        amounts = [float(amount) for amount in rewards_by_wallet.values()]
+        
         tx_hash = service.batch_mint(wallets, amounts)
         
         if tx_hash:
@@ -51,15 +54,19 @@ def process_reward_batch():
             )
             
             for wallet, amount in rewards_by_wallet.items():
-                profile = UserProfile.objects.get(wallet_address=wallet)
-                profile.virtual_balance -= amount
-                profile.blockchain_balance += amount
-                profile.save()
+                profile = UserProfile.objects.filter(wallet_address=wallet).first()
+                if profile:
+                    profile.virtual_balance -= amount
+                    profile.blockchain_balance += amount
+                    profile.save()
+                    logger.info(f"✅ Saldo atualizado para {wallet}: {profile.blockchain_balance}")
+                else:
+                    logger.warning(f"❌ Perfil não encontrado para {wallet}")
             
             logger.info(f"Transação de mint enviada: {tx_hash}")
             return tx_hash
     
     except Exception as e:
-        logger.error(f"Erro ao processar recompensas: {str(e)}")
-        
+        logger.error(f"❌ Erro ao processar recompensas: {str(e)}")
+    
     return None

@@ -1,6 +1,7 @@
 import os
 import json
 import time
+from venv import logger
 from web3 import Web3
 from pathlib import Path
 from django.conf import settings
@@ -13,7 +14,10 @@ class BlockchainService:
         self.admin_address = self.account.address
         
         if hasattr(settings, 'CONTRACT_ADDRESS') and self.w3.is_address(settings.CONTRACT_ADDRESS):
-            self._load_contract()
+            if not self._load_contract():
+                logger.warning("⚠️ Contrato não carregado")
+        else:
+            logger.warning("⚠️ CONTRACT_ADDRESS não definido ou inválido")
     
     def _load_contract(self):
         """Carrega o contrato deployado"""
@@ -30,8 +34,11 @@ class BlockchainService:
                 abi=abi
             )
             return True
+        except FileNotFoundError:
+            logger.error("❌ Arquivo FeedbackToken.json não encontrado")
+            return False
         except Exception as e:
-            print(f"Erro ao carregar contrato: {e}")
+            logger.error(f"❌ Erro ao carregar contrato: {e}")
             self.contract = None
             return False
 
@@ -74,33 +81,50 @@ class BlockchainService:
     
     def batch_mint(self, recipients, amounts):
         try:
+            # Obter base fee do último bloco (EIP-1559)
             latest_block = self.w3.eth.get_block('latest')
-            base_fee = latest_block['baseFeePerGas']
+            base_fee = latest_block.get('baseFeePerGas')
 
-            max_priority_fee_per_gas = int(2e9) 
-            max_fee_per_gas = base_fee + max_priority_fee_per_gas
+            if base_fee is not None:
+                # Usar transação EIP-1559
+                max_priority_fee = int(2e9)  # 2 Gwei
+                max_fee_per_gas = base_fee + max_priority_fee
+                
+                transaction_params = {
+                    'type': 2,
+                    'maxPriorityFeePerGas': max_priority_fee,
+                    'maxFeePerGas': max_fee_per_gas,
+                    'gas': 5000000,
+                    'chainId': settings.CHAIN_ID,
+                    'nonce': self.w3.eth.get_transaction_count(self.admin_address),
+                }
+                logger.info(f"✅ Usando EIP-1559 | Base Fee: {base_fee} | Max Fee: {max_fee_per_gas}")
+            else:
+                # Fallback para transação legada (gasPrice)
+                gas_price = int(2e9)  # 2 Gwei (fixo)
+                
+                transaction_params = {
+                    'gas': 5000000,
+                    'gasPrice': gas_price,
+                    'chainId': settings.CHAIN_ID,
+                    'nonce': self.w3.eth.get_transaction_count(self.admin_address),
+                    # Não incluir 'type' para transações legadas
+                }
+                logger.info(f"⚠️ Fallback para transação legada | gasPrice: {gas_price}")
 
+            # Construir e assinar transação
             tx = self.contract.functions.batchMint(
                 recipients,
                 [int(amount * 10**18) for amount in amounts]
-            ).build_transaction({
-                'chainId': settings.CHAIN_ID,
-                'gas': 5000000,
-                'maxPriorityFeePerGas': max_priority_fee_per_gas,
-                'maxFeePerGas': max_fee_per_gas,
-                'nonce': self.w3.eth.get_transaction_count(self.admin_address),
-                'type': 2, 
-            })
+            ).build_transaction(transaction_params)
 
             signed_tx = self.w3.eth.account.sign_transaction(tx, settings.PRIVATE_KEY)
             tx_hash = self.w3.eth.send_raw_transaction(signed_tx.raw_transaction)
+            logger.info(f"🔗 Transação enviada: {tx_hash.hex()}")
             return tx_hash.hex()
 
-        except ContractLogicError as e:
-            print(f"Erro de contrato: {e}")
-            return None
         except Exception as e:
-            print(f"Erro inesperado: {e}")
+            logger.error(f"❌ Erro ao mintar tokens: {e}")
             return None
     
     def transfer(self, to_address, amount):
@@ -120,7 +144,7 @@ class BlockchainService:
                 'chainId': settings.CHAIN_ID,
                 'gas': 200000,
                 'maxPriorityFeePerGas': max_priority_fee_per_gas,
-                'maxFeePerGas': max_fee_per_gas,
+                'maxFeePerGas': base_fee + 2e9,
                 'nonce': self.w3.eth.get_transaction_count(self.admin_address),
                 'type': 2,
             })
