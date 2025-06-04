@@ -6,10 +6,8 @@ from dotenv import load_dotenv  # Importa a função
 
 def main():
     # Define a raiz do projeto
-    BASE_DIR = Path(__file__).resolve().parent  # feedback_platform/
-    dotenv_path = BASE_DIR / 'blockchain' / '.env'  # Caminho específico para o .env
-    
-    # Carrega o .env do caminho correto
+    BASE_DIR = Path(__file__).resolve().parent.parent  # Sobe UM nível!
+    dotenv_path = BASE_DIR / 'blockchain' / '.env'
     load_dotenv(dotenv_path)
 
     # Configura as settings do Django

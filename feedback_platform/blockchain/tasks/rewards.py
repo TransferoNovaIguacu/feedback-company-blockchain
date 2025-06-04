@@ -8,8 +8,19 @@ from web3 import Web3
 
 logger = logging.getLogger(__name__)
 
-@shared_task(name="process_reward_batch")
-def process_reward_batch():
+@shared_task(
+    name="process_reward_batch",
+    autoretry_for=(Exception,),
+    retry_backoff=3,
+    retry_kwargs={'max_retries': 5},
+    bind=True
+)
+def process_reward_batch(self):
+     # LOGS PRA CHECAR AS VARIÁVEIS DE AMBIENTE
+    from django.conf import settings
+    logger.debug(f"WEB3_PROVIDER_URL: {getattr(settings, 'WEB3_PROVIDER_URL', None)}")
+    logger.debug(f"PRIVATE_KEY: {getattr(settings, 'PRIVATE_KEY', None)}")
+    logger.debug(f"CONTRACT_ADDRESS: {getattr(settings, 'CONTRACT_ADDRESS', None)}")
     try:
         # 1) Instancia o serviço e verifica se o contrato carregou
         service = BlockchainService()

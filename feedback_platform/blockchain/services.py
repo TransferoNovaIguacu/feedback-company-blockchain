@@ -128,9 +128,9 @@ class BlockchainService:
 
             # 3) Verifica se existe algum None em recipients
             for idx, r in enumerate(recipients):
-                if r is None:
-                    raise ValueError(f"batch_mint recebeu recipients[{idx}] = None")
-            logger.debug(f"[DEBUG batch_mint] recipients = {recipients}")
+                if r is None or not isinstance(r, str) or not r.startswith("0x") or len(r) != 42:
+                    logger.error(f"[ERROR] batch_mint recebeu recipients[{idx}] = {r!r} (type: {type(r)})")
+                    raise ValueError(f"batch_mint recebeu recipients[{idx}] inválido: {r!r}")
 
             # 4) Converte amounts → wei e verifica se não há None
             wei_amounts = []
