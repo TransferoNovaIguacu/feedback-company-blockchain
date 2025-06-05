@@ -78,7 +78,7 @@ def process_reward_batch(self):
 
             checksum_addr = Web3.to_checksum_address(wallet)
             valid_wallets.append(checksum_addr)
-            valid_amounts.append(float(total))
+            valid_amounts.append(int(total * 10**18))
 
         logger.debug(f"[STEP] valid_wallets = {valid_wallets}")
         logger.debug(f"[STEP] valid_amounts = {valid_amounts}")

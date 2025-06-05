@@ -1,0 +1,106 @@
+🧪 Passo 1: Confirme que os dados foram criados corretamente
+📄 No shell do Django:
+bash
+
+
+1
+python manage.py shell
+python
+
+
+1
+2
+3
+from blockchain.models import RewardTransaction, UserProfile
+print("Recompensas PENDING:", RewardTransaction.objects.filter(status='PENDING').count())
+print("Recipients com wallet_address:", UserProfile.objects.filter(wallet_address__isnull=False).count())
+➡️ Se ambos retornarem 0, os dados não foram criados corretamente
+
+🧰 Passo 2: Crie dados de teste com status='PENDING' e tx_type='REWARD'
+📄 No shell:
+python
+
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+⌄
+from django.contrib.auth.models import User
+from blockchain.models import UserProfile, RewardTransaction
+from decimal import Decimal
+
+# Cria usuário se não existir
+user, _ = User.objects.get_or_create(username="test_user")
+user.set_password("testpass")
+user.save()
+
+# Cria perfil com carteira
+profile, _ = UserProfile.objects.get_or_create(user=user)
+profile.wallet_address = "0x6123aBC4567890DE12345feDCba6789A1234fdEC"  # Endereço válido
+profile.save()
+
+# Cria recompensas PENDING
+for _ in range(3):
+    RewardTransaction.objects.create(
+        user=user,
+        amount=Decimal('0.5'),
+        tx_type='REWARD',
+        status='PENDING'
+    )
+
+print("✅ Recompensas criadas:", RewardTransaction.objects.filter(status='PENDING').count())
+🧾 Passo 3: Confirme que o endereço Ethereum é válido
+📄 Valide no shell:
+python
+
+
+1
+2
+3
+4
+5
+from web3 import Web3
+
+wallet = profile.wallet_address
+print("Endereço válido?", Web3.is_address(wallet))
+print("Formato checksumado:", Web3.to_checksum_address(wallet))
+➡️ Se retornar False, o endereço está inválido ou com formato incorreto
+➡️ Use um endereço Ethereum válido (ex: 0x6123aBC4567890DE12345feDCba6789A1234fdEC)
+
+🧪 Passo 4: Execute a tarefa no shell
+bash
+
+
+1
+python manage.py shell
+python
+
+
+1
+2
+3
+from blockchain.tasks.rewards import process_reward_batch
+result = process_reward_batch.delay()
+print("ID da tarefa:", result.id)
+➡️ Volte ao worker do Celery e veja se ele processa as recompensas

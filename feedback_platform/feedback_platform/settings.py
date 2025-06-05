@@ -13,12 +13,15 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from decimal import Decimal
 import os
 from dotenv import load_dotenv
+from pathlib import Path
 
-env_path = os.path.join(os.path.dirname(__file__), '..', '.env')
-load_dotenv(env_path)
+BASE_DIR = Path(__file__).resolve().parent.parent
+dotenv_path = BASE_DIR / 'blockchain' / '.env'
+load_dotenv(dotenv_path)
 
 # Configurações Blockchain
-WEB3_PROVIDER_URL = os.getenv('WEB3_PROVIDER_URL')
+WEB3_HTTP_PROVIDER_URL = os.getenv('WEB3_PROVIDER_URL')
+WEB3_WS_PROVIDER_URL = os.getenv('WEB3_WS_PROVIDER_URL')
 CHAIN_ID = int(os.getenv('CHAIN_ID', 11155111))
 CONTRACT_ADDRESS = os.getenv('CONTRACT_ADDRESS')
 PRIVATE_KEY = os.getenv('PRIVATE_KEY')

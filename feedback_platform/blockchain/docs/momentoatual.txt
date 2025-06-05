@@ -1,0 +1,581 @@
+✅ Revisão Completa do Projeto Feedback Platform
+🧠 Visão Geral do Funcionamento Atual
+Seu projeto está 95% funcional com:
+
+Contrato Solidity deployado e funcionando (✅ Sepolia)
+Mint em lote (batchMint) via Django CLI (✅)
+Worker Celery com process_reward_batch (✅)
+Validação de MINTER_ROLE no contrato (✅)
+Saldo local no Django atualizado após mint (✅)
+Logs detalhados e tratamento de erro (⚠️ Parcial)
+🔍 O que falta para o listen_for_batch_mint_events funcionar corretamente
+1. Erro no uso de create_filter() com HTTPProvider
+python
+
+
+1
+event_filter = service.contract.events.BatchMinted.create_filter(fromBlock='latest')
+➡️ Problema:
+create_filter() requer conexão WebSocket (não funciona com HTTPProvider)
+
+✅ Solução: Use get_logs() com polling manual
+python
+
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+⌄
+⌄
+⌄
+⌄
+⌄
+⌄
+⌄
+⌄
+⌄
+⌄
+⌄
+# blockchain/tasks/events.py
+def listen_for_batch_mint_events():
+    service = BlockchainService(use_ws=False)
+    last_block = service.w3.eth.block_number  # Começa do bloco atual
+    
+    while True:
+        try:
+            current_block = service.w3.eth.block_number
+            if current_block > last_block:
+                events = service.contract.events.BatchMinted.get_logs(
+                    fromBlock=last_block + 1,
+                    toBlock=current_block
+                )
+                for event in events:
+                    recipients = event.args['recipients']
+                    amounts = event.args['amounts']
+                    
+                    for recipient, amount in zip(recipients, amounts):
+                        try:
+                            with transaction.atomic():
+                                profile = UserProfile.objects.select_for_update().get(
+                                    wallet_address__iexact=recipient
+                                )
+                                profile.blockchain_balance += Decimal(str(amount / 10**18))
+                                profile.save()
+                                logger.info(f"✅ Saldo atualizado para {recipient}")
+                        except UserProfile.DoesNotExist:
+                            logger.warning(f"❌ Perfil não encontrado para {recipient}")
+                        except Exception as e:
+                            logger.error(f"🚨 Erro ao atualizar perfil {recipient}: {e}")
+                last_block = current_block
+            time.sleep(5)
+        except Exception as e:
+            logger.error(f"❌ Erro no loop de eventos: {e}")
+            time.sleep(10)
+🛠️ Passo 1: Atualize o BlockchainService.__init__ para aceitar use_ws
+📄 services.py
+python
+
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+⌄
+⌄
+⌄
+⌄
+⌄
+⌄
+⌄
+⌄
+class BlockchainService:
+    def __init__(self, use_ws=False):
+        # ✅ Usa provider correto com base em use_ws
+        provider_url = settings.WEB3_WS_PROVIDER_URL if use_ws else settings.WEB3_HTTP_PROVIDER_URL
+        
+        if use_ws:
+            self.w3 = Web3(Web3.WebSocketProvider(provider_url))  # ✅ WebSocket
+            logger.info("[BlockchainService] ✅ Usando WebSocketProvider")
+        else:
+            self.w3 = Web3(Web3.HTTPProvider(provider_url))  # ✅ HTTP fallback
+            logger.info("[BlockchainService] 🚫 Usando HTTPProvider")
+
+        if not self.w3.is_connected():
+            logger.error("❌ Falha ao conectar com o provider Ethereum")
+            raise ConnectionError("Não foi possível conectar ao provider Ethereum")
+        
+        if hasattr(settings, 'CONTRACT_ADDRESS') and Web3.is_address(settings.CONTRACT_ADDRESS):
+            if not self._load_contract():
+                logger.warning("⚠️ Contrato não carregado")
+        else:
+            logger.warning("⚠️ CONTRACT_ADDRESS inválido ou não definido")
+🧪 Passo 2: Confirme que o worker do Celery está escutando a fila certa
+bash
+
+
+1
+celery -A feedback_platform worker --loglevel=info --pool=solo --queues celery,event_queue
+➡️ Certifique-se de que ele carrega a tarefa:
+
+
+
+1
+2
+[tasks]
+  . listen_for_batch_mint_events
+📋 Passo 3: Teste manualmente no shell se o evento é detectado
+bash
+
+
+1
+python manage.py shell
+python
+
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+from blockchain.services import BlockchainService
+service = BlockchainService(use_ws=False)  # Use HTTPProvider
+
+# Tenta obter eventos manualmente
+events = service.contract.events.BatchMinted.get_logs(
+    fromBlock='latest',
+    toBlock='latest'
+)
+print("Eventos detectados:", len(events))
+➡️ Se retornar eventos, o problema está na tarefa Celery
+
+🧾 Passo 4: Corrija o formato de endereço no Django e no contrato
+python
+
+
+1
+2
+3
+4
+5
+6
+7
+# ❌ Endereço sem checksum no Django
+profile.wallet_address = "0x6123AbC4567890dE12345fEdCBA6789a1234FDeC"
+
+# ✅ Use checksum para garantir compatibilidade
+checksum_addr = Web3.to_checksum_address("0x6123AbC4567890dE12345fEdCBA6789a1234FDeC")
+profile.wallet_address = checksum_addr
+profile.save()
+➡️ Isso garante que o get_logs() encontre o perfil corretamente
+
+📌 Passo 5: Valide conversão de amounts para Decimal
+python
+
+
+1
+2
+3
+4
+5
+# ❌ Erro: unsupported operand type(s) for +=: 'decimal.Decimal' and 'float'
+token_amount = amount / 10**18  # ❌ Float → causa erro com Decimal
+
+# ✅ Corrigido: converte para string antes
+token_amount = Decimal(str(amount / 10**18))
+➡️ Adicione isso no events.py e rewards.py
+
+🧰 Passo 6: Reinicie o worker do Celery com logs detalhados
+bash
+
+
+1
+celery -A feedback_platform worker --loglevel=debug --pool=solo --queues celery,event_queue
+➡️ Certifique-se de que ele está na pasta correta (feedback_platform/)
+
+📊 Resumo Final das Correções Necessárias
+✅ Substituir
+create_filter()
+por
+get_logs()
+❌ Antes da correção
+✅ Converter
+amounts
+para
+Decimal(str(...))
+❌ Antes da correção
+✅ Usar
+__iexact
+na busca de perfis
+❌ Após validação
+✅ Worker do Celery escutando
+event_queue
+✅ Sim
+✅ Logs detalhados no início da tarefa
+❌ Após adição
+✅ Endereço Ethereum no formato checksumado
+❌ Após correção
+✅
+.env
+carregado corretamente
+✅ Sim
+
+🚀 Próximos passos recomendados
+Atualize o events.py com get_logs() e Decimal(str(...))
+Reinicie o worker do Celery na pasta correta
+Cole o tx_hash no Etherscan para validar evento
+Teste manualmente no shell se o evento é detectado
+Confira no worker se os logs de evento aparecem corretamente
+Se ainda tiver dúvidas ou quiser integrar isso com front-end, posso te ajudar! 🚀
+
+
+
+Os problemas atuais está em testar o events.py e rewards.py no celery para verificar se esta funcionando corretamente.
+
+para testar tem que tá funcionando aqui (.venv) C:\Users\giffo\Documents\Lukas Programação\feedback_platform\feedback_platform>celery -A feedback_platform worker --loglevel=debug --pool=solo --queues celery,event_queue
+
+o redis tem que estar aberto
+
+usar o python manage.py shell
+para realizar os testes 
+
+
+
+✅ Vamos adaptar o events.py para funcionar com HTTPProvider e resolver os problemas de tipo no Django
+🛠️ Passo 1: Atualize o events.py para usar HTTPProvider
+python
+
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39
+40
+41
+42
+43
+44
+45
+46
+47
+48
+49
+50
+51
+52
+53
+54
+55
+56
+57
+58
+59
+60
+61
+62
+63
+64
+65
+⌄
+⌄
+⌄
+⌄
+⌄
+⌄
+⌄
+⌄
+⌄
+⌄
+⌄
+⌄
+# blockchain/tasks/events.py
+import logging
+import time
+from decimal import Decimal
+from celery import shared_task
+from django.conf import settings
+from blockchain.services import BlockchainService
+from blockchain.models import UserProfile
+from django.db import transaction
+
+logger = logging.getLogger(__name__)
+
+@shared_task(name="listen_for_batch_mint_events", queue='event_queue')
+def listen_for_batch_mint_events():
+    """Escuta eventos BatchMinted e atualiza o sistema via HTTPProvider"""
+    try:
+        logger.info("🎧 Iniciando escuta de eventos BatchMinted")
+        service = BlockchainService(use_ws=False)  # ✅ Força uso de HTTPProvider
+        logger.info("✅ Conectado à blockchain via HTTP")
+        
+        # Obtém o último bloco processado (ou define como 'latest')
+        last_block = getattr(settings, 'LAST_PROCESSED_BLOCK', 'latest')
+
+        while True:
+            try:
+                # ✅ Usa get_logs() com fromBlock='latest' para HTTPProvider
+                events = service.contract.events.BatchMinted.get_logs(
+                    fromBlock=last_block,
+                    toBlock='latest'
+                )
+
+                for event in events:
+                    logger.info(f"🎉 Evento BatchMinted detectado no bloco {event.blockNumber}")
+                    recipients = event.args.recipients
+                    amounts = event.args.amounts
+
+                    for recipient, amount in zip(recipients, amounts):
+                        try:
+                            with transaction.atomic():
+                                profile = UserProfile.objects.get(wallet_address__iexact=recipient)
+                                token_amount = Decimal(str(amount / 10**18))
+                                
+                                # ✅ Converte para Decimal antes de somar
+                                profile.blockchain_balance += token_amount
+                                profile.save(update_fields=['blockchain_balance'])
+                                logger.info(f"✅ Saldo atualizado para {recipient}: {profile.blockchain_balance} FBTK")
+                        except UserProfile.DoesNotExist:
+                            logger.warning(f"❌ Perfil não encontrado para {recipient}")
+                        except Exception as e:
+                            logger.error(f"🚨 Erro ao atualizar perfil {recipient}: {e}")
+
+                    # Atualiza o último bloco processado
+                    last_block = event.blockNumber + 1
+                    settings.LAST_PROCESSED_BLOCK = last_block
+
+                time.sleep(5)
+
+            except Exception as e:
+                logger.error(f"❌ Erro durante a escuta: {e}")
+                time.sleep(10)
+                service = BlockchainService(use_ws=False)  # Recria serviço em caso de erro
+
+    except Exception as e:
+        logger.exception(f"❌ ERRO CRÍTICO ao iniciar escuta de eventos: {e}")
+        raise
+🧰 Passo 2: Atualize o services.py para aceitar use_ws=False
+📄 services.py
+python
+
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+⌄
+⌄
+⌄
+⌄
+⌄
+⌄
+⌄
+⌄
+class BlockchainService:
+    def __init__(self, use_ws=False):
+        # ✅ Ajusta o provider com base em use_ws
+        provider_url = settings.WEB3_WS_PROVIDER_URL if use_ws else settings.WEB3_HTTP_PROVIDER_URL
+        
+        if use_ws:
+            self.w3 = Web3(Web3.WebSocketProvider(provider_url))
+            logger.info("[BlockchainService] ✅ Usando WebSocketProvider")
+        else:
+            self.w3 = Web3(Web3.HTTPProvider(provider_url))
+            logger.info("[BlockchainService] 🚫 Usando HTTPProvider")
+
+        # ✅ Valida conexão
+        if not self.w3.is_connected():
+            logger.error("❌ Falha ao conectar com o provider Ethereum")
+            raise ConnectionError("Não foi possível conectar ao provider Ethereum")
+
+        # ✅ Carrega contrato
+        if hasattr(settings, 'CONTRACT_ADDRESS') and Web3.is_address(settings.CONTRACT_ADDRESS):
+            if not self._load_contract():
+                logger.warning("⚠️ Contrato não carregado")
+        else:
+            logger.warning("⚠️ CONTRACT_ADDRESS não definido ou inválido")
+🧪 Passo 3: Reinicie o worker do Celery com logs detalhados
+bash
+
+
+1
+celery -A feedback_platform worker --loglevel=info --pool=solo --queues event_queue
+➡️ Certifique-se de que ele está na raiz do projeto (feedback_platform/)
+
+🧾 Passo 4: Execute manualmente no shell para validar eventos
+bash
+
+
+1
+python manage.py shell
+python
+
+
+1
+2
+3
+4
+5
+6
+from blockchain.services import BlockchainService
+service = BlockchainService(use_ws=False)
+
+# Obter evento manualmente
+events = service.contract.events.BatchMinted.get_logs(fromBlock='latest', toBlock='latest')
+print("Eventos detectados:", len(events))
+➡️ Se aparecerem eventos, o problema está na tarefa Celery
+
+🧪 Passo 5: Crie uma transação para gerar evento
+📄 No shell:
+bash
+
+
+1
+python manage.py shell
+python
+
+
+1
+2
+from blockchain.tasks.rewards import process_reward_batch
+process_reward_batch.delay()
+➡️ Isso vai gerar um evento BatchMinted que seu listen_for_batch_mint_events pode capturar
+
+📋 Resumo Final
+✅
+events.py
+usa
+get_logs()
+em vez de
+get_new_entries()
+❌ Antes da correção
+✅ Valida
+token_amount
+como
+Decimal
+❌ Antes da correção
+✅ Worker do Celery escutando
+event_queue
+✅ Sim
+✅
+BlockchainService
+aceita
+use_ws=False
+❌ Após validação
+✅ Logs mostrando eventos detectados
+❌ Após execução
+✅ Saldo local atualizado após evento
+❌ Após validação
+
+🚀 Próximos passos recomendados
+Atualize o events.py com get_logs() e Decimal
+Reinicie o worker do Celery com --queues event_queue
+Cole o tx_hash no Etherscan para validar evento
+Teste manualmente no shell se o evento é detectado
+Confira no worker se os logs de evento aparecem corretamente
+Se ainda tiver dúvidas ou quiser integrar isso com front-end, posso te ajudar! 🚀

@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-BASE_DIR = Path(__file__).resolve().parent.parent  # Sobe UM nível!
+BASE_DIR = Path(__file__).resolve().parent.parent
 dotenv_path = BASE_DIR / 'blockchain' / '.env'
 load_dotenv(dotenv_path)
 print("DEBUG: .env carregado de", dotenv_path)
