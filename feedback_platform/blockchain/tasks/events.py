@@ -38,7 +38,6 @@ def listen_for_batch_mint_events():
                                 profile = UserProfile.objects.get(wallet_address__iexact=recipient)
                                 token_amount = Decimal(str(amount / 10**18))
                                 
-                                # ✅ Converte para Decimal antes de somar
                                 profile.blockchain_balance += token_amount
                                 profile.save(update_fields=['blockchain_balance'])
                                 logger.info(f"✅ Saldo atualizado para {recipient}: {profile.blockchain_balance} FBTK")
@@ -46,8 +45,6 @@ def listen_for_batch_mint_events():
                             logger.warning(f"❌ Perfil não encontrado para {recipient}")
                         except Exception as e:
                             logger.error(f"🚨 Erro ao atualizar perfil {recipient}: {e}")
-
-                    # Atualiza o último bloco processado
                     last_block = event.blockNumber + 1
                     settings.LAST_PROCESSED_BLOCK = last_block
 
@@ -56,7 +53,7 @@ def listen_for_batch_mint_events():
             except Exception as e:
                 logger.error(f"❌ Erro durante a escuta: {e}")
                 time.sleep(10)
-                service = BlockchainService(use_ws=False)  # Recria serviço em caso de erro
+                service = BlockchainService(use_ws=False)
 
     except Exception as e:
         logger.exception(f"❌ ERRO CRÍTICO ao iniciar escuta de eventos: {e}")

@@ -16,20 +16,16 @@ logger = logging.getLogger(__name__)
     bind=True
 )
 def process_reward_batch(self):
-     # LOGS PRA CHECAR AS VARIÁVEIS DE AMBIENTE
     from django.conf import settings
     logger.debug(f"WEB3_PROVIDER_URL: {getattr(settings, 'WEB3_PROVIDER_URL', None)}")
     logger.debug(f"PRIVATE_KEY: {getattr(settings, 'PRIVATE_KEY', None)}")
     logger.debug(f"CONTRACT_ADDRESS: {getattr(settings, 'CONTRACT_ADDRESS', None)}")
     try:
-        # 1) Instancia o serviço e verifica se o contrato carregou
         service = BlockchainService()
         logger.debug("[STEP] Instanciou BlockchainService")
         if not service.contract:
             logger.error("❌ Contrato não carregado. Não é possível mintar tokens.")
             return None
-
-        # 2) Busca todas as RewardTransaction PENDING com wallet_address não-nulo
         pending_rewards = RewardTransaction.objects.filter(
             status='PENDING',
             tx_type='REWARD',
@@ -42,7 +38,6 @@ def process_reward_batch(self):
 
         logger.info(f"Processando {pending_rewards.count()} recompensas pendentes")
 
-        # 3) Agrupa valores por wallet_address (strip() + ignora vazios)
         rewards_by_wallet = {}
         tx_ids = []
         for reward in pending_rewards:
@@ -66,12 +61,9 @@ def process_reward_batch(self):
         if not rewards_by_wallet:
             logger.info("Nenhum endereço válido depois de agrupar.")
             return None
-
-        # 4) Valida cada endereço com Web3.is_address(...) e monta listas finais
         valid_wallets = []
         valid_amounts = []
         for wallet, total in rewards_by_wallet.items():
-            # Atenção: validar com is_address (underscore), não isAddress
             if not Web3.is_address(wallet):
                 logger.warning(f"[WARNING] Endereço inválido: {wallet!r}. Pulando.")
                 continue
@@ -86,15 +78,11 @@ def process_reward_batch(self):
         if not valid_wallets:
             logger.info("Nenhuma carteira válida após validação final. Abortando.")
             return None
-
-        # 5) Chama batch_mint no serviço
         tx_hash = service.batch_mint(valid_wallets, valid_amounts)
 
         if not tx_hash:
             logger.error("❌ batch_mint retornou None. Verifique os logs de batch_mint.")
             return None
-
-        # 6) Atualiza as RewardTransaction para PROCESSING e ajusta saldos
         RewardTransaction.objects.filter(id__in=tx_ids).update(
             status='PROCESSING',
             tx_hash=tx_hash,

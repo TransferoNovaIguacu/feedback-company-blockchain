@@ -3,12 +3,10 @@ from blockchain.services import BlockchainService
 
 class Command(BaseCommand):
     help = 'Minta tokens para múltiplos endereços'
-
     def handle(self, *args, **kwargs):
         service = BlockchainService()
         recipients = ["0x6D68105c0947bF1BfeB8594D5A771387Eac66E0c"]
         amounts = [100]
-        
         tx_hash = service.batch_mint(recipients, amounts)
         
         if tx_hash:

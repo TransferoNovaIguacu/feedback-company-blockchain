@@ -12,8 +12,6 @@ class Feedback(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     is_approved = models.BooleanField(default=False)
     is_useful = models.BooleanField(default=False)
-    
-    
     class Meta:
         ordering = ['-created_at']
 

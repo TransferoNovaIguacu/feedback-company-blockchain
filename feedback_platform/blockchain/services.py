@@ -1,4 +1,5 @@
 # feedback_platform/blockchain/services.py
+
 import os
 import json
 import logging
@@ -13,22 +14,25 @@ logger = logging.getLogger(__name__)
 
 class BlockchainService:
     def __init__(self, use_ws=False):
-        # ✅ Ajusta o provider com base em use_ws
         provider_url = settings.WEB3_WS_PROVIDER_URL if use_ws else settings.WEB3_HTTP_PROVIDER_URL
         
         if use_ws:
-            self.w3 = Web3(Web3.WebSocketProvider(provider_url))
+            self.w3 = Web3(WebSocketProvider(provider_url))  # ✅ Novo uso de WebSocketProvider
             logger.info("[BlockchainService] ✅ Usando WebSocketProvider")
         else:
             self.w3 = Web3(Web3.HTTPProvider(provider_url))
             logger.info("[BlockchainService] 🚫 Usando HTTPProvider")
 
-        # ✅ Valida conexão
+        # Confere conexão
         if not self.w3.is_connected():
             logger.error("❌ Falha ao conectar com o provider Ethereum")
             raise ConnectionError("Não foi possível conectar ao provider Ethereum")
+        
+        # Inicializa conta
+        self.account = self.w3.eth.account.from_key(settings.PRIVATE_KEY)
+        self.admin_address = self.account.address
 
-        # ✅ Carrega contrato
+        # Carrega contrato se disponível
         if hasattr(settings, 'CONTRACT_ADDRESS') and Web3.is_address(settings.CONTRACT_ADDRESS):
             if not self._load_contract():
                 logger.warning("⚠️ Contrato não carregado")
